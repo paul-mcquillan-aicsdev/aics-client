@@ -1,0 +1,24 @@
+/* === Context Panel === */
+#contextPanel {
+  position: fixed;
+  bottom: 90px;
+  right: 10px;
+  width: 220px;
+  background-color: #1c1c1c;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 10px;
+  font-size: 0.85em;
+  color: #ddd;
+}
+
+#contextPanel h4 {
+  margin: 0 0 6px 0;
+  font-size: 0.9em;
+  color: #9ecbff;
+}
+
+#entityList {
+  margin: 4px 0 0 0;
+  padding-left: 16px;
+}
