@@ -1,124 +1,166 @@
-// ===================== Imports =====================
-import { sendMessage, resetConversation } from './api.js';
-import { recognizeSpeech, speakText, initSpeechSDK } from './speech.js';
+import { sendMessage } from "./api.js";
+import {
+  startListening,
+  stopListening,
+  isListening,
+  speak
+} from "./speech.js";
 
-// ===================== Interfaces =====================
-interface ChatMessage {
-  message: string;
-  sender: "user" | "ai";
-  timestamp: Date;
-}
+/* =========================
+   DOM ELEMENTS
+========================= */
 
-// ===================== DOM Elements =====================
-const chatLog = document.getElementById("chatLog") as HTMLDivElement;
+const chatLog = document.getElementById("chatLog") as HTMLElement;
 const messageInput = document.getElementById("messageInput") as HTMLTextAreaElement;
 const sendBtn = document.getElementById("sendBtn") as HTMLButtonElement;
-const resetBtn = document.getElementById("resetBtn") as HTMLButtonElement;
-const typingIndicator = document.getElementById("typingIndicator") as HTMLDivElement;
-const voiceBtn = document.getElementById("voiceBtn") as HTMLButtonElement | null;
+const talkBtn = document.getElementById("talkBtn") as HTMLButtonElement;
+const typingIndicator = document.getElementById("typingIndicator") as HTMLElement;
+const liveTranscript = document.getElementById("liveTranscript") as HTMLElement;
 
-// ===================== Helper Functions =====================
-function createMessageBubble(msg: ChatMessage) {
-  const bubble = document.createElement("div");
-  bubble.classList.add(msg.sender === "user" ? "user-msg" : "ai-msg");
+/* =========================
+   INIT
+========================= */
 
-  // Profile Icon
-  const icon = document.createElement("span");
-  icon.classList.add("profile-icon");
-  icon.textContent = msg.sender === "user" ? "🧑" : "🤖";
+messageInput.focus();
 
-  // Message content
-  const content = document.createElement("div");
-  content.classList.add("msg-content");
-  content.textContent = msg.message;
+/* =========================
+   TEXT SEND (Keyboard)
+========================= */
 
-  // Timestamp
-  const timestamp = document.createElement("span");
-  timestamp.classList.add("timestamp");
-  timestamp.textContent = msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+sendBtn.addEventListener("click", async () => {
+  const text = messageInput.value.trim();
+  if (!text) return;
 
-  content.appendChild(timestamp);
-  bubble.appendChild(icon);
-  bubble.appendChild(content);
-  chatLog.appendChild(bubble);
+  messageInput.value = ""; // clear immediately
+  appendUserMessage(text);
 
-  // Auto-scroll
-  chatLog.scrollTop = chatLog.scrollHeight;
-}
-
-function showTypingIndicator(duration = 3000) {
-  typingIndicator.classList.remove("hidden");
-  setTimeout(() => typingIndicator.classList.add("hidden"), duration);
-}
-
-// ===================== Send Message =====================
-async function handleSendMessage() {
-  const message = messageInput.value.trim();
-  if (!message) return;
-
-  // Render user message
-  createMessageBubble({ message, sender: "user", timestamp: new Date() });
-
-  // Clear input
-  messageInput.value = "";
-  messageInput.focus();
-
-  // Typing indicator
-  showTypingIndicator();
-
-  try {
-    const aiResponse = await sendMessage(message);
-
-    createMessageBubble({ message: aiResponse, sender: "ai", timestamp: new Date() });
-
-    // Speak AI response
-    try { await speakText(aiResponse); } catch (err) { console.error("TTS failed", err); }
-
-  } catch (err) {
-    console.error(err);
-    createMessageBubble({ message: "Error sending message", sender: "ai", timestamp: new Date() });
-  }
-}
-
-// ===================== Event Listeners =====================
-sendBtn.addEventListener("click", handleSendMessage);
+  await handleAIResponse(text);
+});
 
 messageInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    handleSendMessage();
+    sendBtn.click();
   }
 });
 
-resetBtn.addEventListener("click", () => {
-  resetConversation();
-  chatLog.innerHTML = "";
-  messageInput.focus();
+/* =========================
+   VOICE TOGGLE
+========================= */
+
+talkBtn.addEventListener("click", async () => {
+  if (!isListening()) {
+    talkBtn.classList.add("active");
+    talkBtn.textContent = "Listening…";
+    liveTranscript.textContent = "";
+
+    await startListening(
+      // 📝 partial transcript
+      (partialText: string) => {
+        liveTranscript.textContent = partialText;
+      },
+
+      // ✅ final transcript
+      async (finalText: string) => {
+        if (!finalText) return;
+
+        liveTranscript.textContent = "";
+        appendUserMessage(finalText);
+
+        await handleAIResponse(finalText);
+      },
+
+      // ⏹ auto-stop (silence)
+      () => {
+        resetTalkButton();
+      }
+    );
+  } else {
+    stopListening();
+    resetTalkButton();
+  }
 });
 
-if (voiceBtn) {
-  voiceBtn.addEventListener("click", async () => {
-    try {
-      const userText = await recognizeSpeech(); // STT
-      if (!userText) return;
+/* =========================
+   CORE AI HANDLER
+========================= */
 
-      messageInput.value = userText;
-      await handleSendMessage();
-    } catch (err) {
-      console.error("Voice recognition failed", err);
-    }
-  });
+async function handleAIResponse(text: string) {
+  showTyping(true);
+
+  try {
+    const reply = await sendMessage(text);
+
+    showTyping(false);
+    appendAIMessage(reply);
+
+    // 🔊 Speak AFTER message is rendered
+    await speak(reply);
+  } catch (err) {
+    console.error(err);
+    showTyping(false);
+    appendSystemMessage("Something went wrong.");
+  }
 }
 
-// ===================== Initialization =====================
-(async () => {
-  try {
-    await initSpeechSDK(); // fetch token & init SDK
-    console.log("Azure Speech SDK initialized successfully");
-  } catch (err) {
-    console.error("Failed to initialize Azure Speech SDK", err);
-  }
+/* =========================
+   UI HELPERS
+========================= */
 
-  // Focus input on load
-  messageInput.focus();
-})();
+function showTyping(show: boolean) {
+  typingIndicator.classList.toggle("hidden", !show);
+}
+
+function resetTalkButton() {
+  talkBtn.classList.remove("active");
+  talkBtn.textContent = "Talk";
+  liveTranscript.textContent = "";
+}
+
+/* =========================
+   MESSAGE RENDERING
+========================= */
+
+function appendUserMessage(text: string) {
+  appendMessage(text, "user-msg", "U");
+}
+
+function appendAIMessage(text: string) {
+  appendMessage(text, "ai-msg", "AI");
+}
+
+function appendSystemMessage(text: string) {
+  appendMessage(text, "system-msg", "!");
+}
+
+function appendMessage(text: string, cssClass: string, label: string) {
+  const msg = document.createElement("div");
+  msg.className = `message ${cssClass}`;
+
+  const icon = document.createElement("img");
+  icon.className = "profile-icon";
+  icon.src =
+    label === "U"
+      ? "https://via.placeholder.com/28/1e8449/ffffff?text=U"
+      : label === "AI"
+      ? "https://via.placeholder.com/28/2874a6/ffffff?text=AI"
+      : "https://via.placeholder.com/28/555/ffffff?text=!";
+
+  const content = document.createElement("div");
+  content.className = "msg-content";
+  content.textContent = text;
+
+  const timestamp = document.createElement("div");
+  timestamp.className = "timestamp";
+  timestamp.textContent = new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+
+  msg.appendChild(icon);
+  msg.appendChild(content);
+  msg.appendChild(timestamp);
+
+  chatLog.appendChild(msg);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
