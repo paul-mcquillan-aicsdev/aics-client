@@ -1,5 +1,5 @@
 let conversationId = ""; //localStorage.getItem("conversationId") || "";
-let threadId = localStorage.getItem("threadId") || "";
+let threadId = "";
 const USER_ID = "d744a18a-abca-f011-8544-7c1e522e1702";
 //const API_URL = "https://localhost:7046/api/AICS/message"; // your endpoint
 const API_URL = "https://aics-fahbamdcfpase8dd.canadacentral-01.azurewebsites.net/api/AICS/message";
@@ -11,8 +11,7 @@ export async function sendMessage(message) {
     const payload = {
         Message: message,
         ConversationId: conversationId,
-        UserId: USER_ID,
-        ThreadId: threadId
+        UserId: USER_ID
     };
     const response = await fetch(API_URL, {
         method: "POST",
@@ -30,10 +29,10 @@ export async function sendMessage(message) {
         conversationId = data.ConversationId;
         localStorage.setItem("conversationId", conversationId);
     }
-    if (data.ThreadId) {
-        threadId = data.ThreadId;
-        localStorage.setItem("threadId", threadId);
-    }
+    /*if (data.ThreadId) {
+      threadId = data.ThreadId;
+      localStorage.setItem("threadId", threadId);
+    }*/
     return data.Message || "";
 }
 /**
@@ -43,5 +42,5 @@ export function resetConversation() {
     conversationId = "";
     threadId = "";
     localStorage.removeItem("conversationId");
-    localStorage.removeItem("threadId");
+    //localStorage.removeItem("threadId");
 }
