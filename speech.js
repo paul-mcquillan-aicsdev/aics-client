@@ -1,71 +1,74 @@
-const SDK = window.SpeechSDK;
-if (!SDK)
-    console.warn("Azure Speech SDK not found. Make sure the script is loaded in index.html.");
-// ===================== Token Initialization =====================
-let speechConfig = null;
-let ttsSynth = null;
-/**
- * Fetch short-lived Azure Speech token from backend
- */
+let recognizer = null;
+let synthesizer = null;
+let listening = false;
+let lastSpeechTime = 0;
+let silenceTimer = null;
+const SILENCE_TIMEOUT_MS = 6000;
+/* ===== TOKEN FETCH ===== */
+const BACKEND_URL = "https://aics-fahbamdcfpase8dd.canadacentral-01.azurewebsites.net";
 async function getAzureSpeechToken() {
-    const res = await fetch("https://aics-fahbamdcfpase8dd.canadacentral-01.azurewebsites.net/api/SpeechToken");
+    const res = await fetch(`${BACKEND_URL}/api/SpeechToken`);
     if (!res.ok)
-        throw new Error("Failed to get speech token");
+        throw new Error("Failed to fetch speech token");
     return res.json();
 }
-/**
- * Initialize SDK configs using token
- */
-export async function initSpeechSDK() {
-    if (!SDK)
-        throw new Error("Speech SDK not loaded");
+/* ===== LISTEN ===== */
+export async function startListening(onPartial, onFinal, onStopped) {
+    if (listening)
+        return;
+    listening = true;
+    stopSpeaking(); // 🔇 interrupt TTS
     const { token, region } = await getAzureSpeechToken();
-    // Recognition config
-    speechConfig = SDK.SpeechConfig.fromAuthorizationToken(token, region);
-    speechConfig.speechRecognitionLanguage = "en-US";
-    // TTS config
-    const ttsConfig = SDK.SpeechConfig.fromAuthorizationToken(token, region);
-    ttsConfig.speechSynthesisVoiceName = "en-GB-AbbiNeural";
-    ttsSynth = new SDK.SpeechSynthesizer(ttsConfig);
+    const config = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
+    config.speechRecognitionLanguage = "en-US";
+    const audio = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+    recognizer = new SpeechSDK.SpeechRecognizer(config, audio);
+    recognizer.recognizing = (_, e) => {
+        if (e.result?.text) {
+            lastSpeechTime = Date.now();
+            onPartial(e.result.text);
+        }
+    };
+    recognizer.recognized = (_, e) => {
+        if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
+            lastSpeechTime = Date.now();
+            onFinal(e.result.text.trim());
+        }
+    };
+    recognizer.startContinuousRecognitionAsync();
+    lastSpeechTime = Date.now();
+    silenceTimer = window.setInterval(() => {
+        if (Date.now() - lastSpeechTime > SILENCE_TIMEOUT_MS) {
+            stopListening();
+            onStopped();
+        }
+    }, 1000);
 }
-// ===================== Speech-to-Text (STT) =====================
-export async function recognizeSpeech() {
-    if (!SDK || !speechConfig)
-        throw new Error("Speech SDK not initialized");
-    return new Promise((resolve, reject) => {
-        try {
-            const audioConfig = SDK.AudioConfig.fromDefaultMicrophoneInput();
-            const recognizer = new SDK.SpeechRecognizer(speechConfig, audioConfig);
-            recognizer.recognizeOnceAsync((result) => {
-                const text = result?.text || "";
-                resolve(text);
-                try {
-                    recognizer.close();
-                }
-                catch { }
-            }, (err) => {
-                reject(err);
-                try {
-                    recognizer.close();
-                }
-                catch { }
-            });
-        }
-        catch (err) {
-            reject(err);
-        }
+export function stopListening() {
+    if (!recognizer)
+        return;
+    recognizer.stopContinuousRecognitionAsync(() => {
+        recognizer.close();
+        recognizer = null;
+        listening = false;
+        if (silenceTimer)
+            clearInterval(silenceTimer);
     });
 }
-// ===================== Text-to-Speech (TTS) =====================
-export async function speakText(text) {
-    if (!SDK || !ttsSynth)
-        throw new Error("TTS SDK not initialized");
-    return new Promise((resolve, reject) => {
-        try {
-            ttsSynth.speakTextAsync(text, () => resolve(), (err) => reject(err));
-        }
-        catch (err) {
-            reject(err);
-        }
-    });
+export function isListening() {
+    return listening;
+}
+/* ===== SPEAK ===== */
+export async function speak(text) {
+    const { token, region } = await getAzureSpeechToken();
+    const config = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
+    config.speechSynthesisVoiceName = "en-GB-AbbiNeural";
+    synthesizer = new SpeechSDK.SpeechSynthesizer(config);
+    synthesizer.speakTextAsync(text);
+}
+export function stopSpeaking() {
+    if (synthesizer) {
+        synthesizer.close();
+        synthesizer = null;
+    }
 }
