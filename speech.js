@@ -3,7 +3,7 @@ let synthesizer = null;
 let listening = false;
 let lastSpeechTime = 0;
 let silenceTimer = null;
-const SILENCE_TIMEOUT_MS = 6000;
+const SILENCE_TIMEOUT_MS = 60000;
 /* ===== TOKEN FETCH ===== */
 const BACKEND_URL = "https://aics-fahbamdcfpase8dd.canadacentral-01.azurewebsites.net";
 async function getAzureSpeechToken() {
