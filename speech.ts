@@ -1,74 +1,79 @@
-// NOTE: this file expects the Azure Speech SDK to be available globally at window.SpeechSDK
+// speech.ts
+// ===================== Azure Speech via Token =====================
+// NOTE: Expects Speech SDK loaded globally in index.html
 declare const SpeechSDK: any;
-const SDK = (window as any).SpeechSDK || (window as any).SpeechSDK || (window as any).speechSDK || SpeechSDK;
+const SDK = (window as any).SpeechSDK;
 
-if (!SDK) {
-  console.warn("Azure Speech SDK not found. Make sure the script is loaded in index.html.");
-}
+if (!SDK) console.warn("Azure Speech SDK not found. Make sure the script is loaded in index.html.");
 
-// Configure these with your Azure Speech key + region
-const AZURE_SPEECH_KEY = "YOUR_AZURE_KEY";
-const AZURE_SPEECH_REGION = "YOUR_AZURE_REGION";
-
-// Speech recognition config
-const speechConfig = SDK ? SDK.SpeechConfig.fromSubscription(AZURE_SPEECH_KEY, AZURE_SPEECH_REGION) : null;
-if (speechConfig) speechConfig.speechRecognitionLanguage = "en-US";
-
-// TTS config — reuse or create new SpeechConfig
-const ttsConfig = SDK ? SDK.SpeechConfig.fromSubscription(AZURE_SPEECH_KEY, AZURE_SPEECH_REGION) : null;
-if (ttsConfig) ttsConfig.speechSynthesisVoiceName = "en-US-JennyNeural";
-
-// Create synthesizer once (re-usable)
-const ttsSynth = SDK && ttsConfig ? new SDK.SpeechSynthesizer(ttsConfig) : null;
+// ===================== Token Initialization =====================
+let speechConfig: any = null;
+let ttsSynth: any = null;
 
 /**
- * recognizeSpeech
- * - Starts a single-shot speech recognition from the default microphone.
- * - Must be called from a user gesture (button click) on Safari/iOS to grant mic permission.
+ * Fetch short-lived Azure Speech token from backend
  */
-export function recognizeSpeech(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (!SDK || !speechConfig) return reject(new Error("Speech SDK not available"));
+async function getAzureSpeechToken(): Promise<{ token: string; region: string }> {
+  const res = await fetch("/api/SpeechToken");
+  if (!res.ok) throw new Error("Failed to get speech token");
+  return res.json();
+}
 
+/**
+ * Initialize SDK configs using token
+ */
+export async function initSpeechSDK() {
+  if (!SDK) throw new Error("Speech SDK not loaded");
+
+  const { token, region } = await getAzureSpeechToken();
+
+  // Recognition config
+  speechConfig = SDK.SpeechConfig.fromAuthorizationToken(token, region);
+  speechConfig.speechRecognitionLanguage = "en-US";
+
+  // TTS config
+  const ttsConfig = SDK.SpeechConfig.fromAuthorizationToken(token, region);
+  ttsConfig.speechSynthesisVoiceName = "en-GB-AbbiNeural";
+
+  ttsSynth = new SDK.SpeechSynthesizer(ttsConfig);
+}
+
+// ===================== Speech-to-Text (STT) =====================
+export async function recognizeSpeech(): Promise<string> {
+  if (!SDK || !speechConfig) throw new Error("Speech SDK not initialized");
+
+  return new Promise((resolve, reject) => {
     try {
       const audioConfig = SDK.AudioConfig.fromDefaultMicrophoneInput();
       const recognizer = new SDK.SpeechRecognizer(speechConfig, audioConfig);
 
-      // Single-shot recognition
-      recognizer.recognizeOnceAsync((result: any) => {
-        // result.reason could be NoMatch/RecognizedSpeech etc. We'll return text if present.
-        const text = result && result.text ? result.text : "";
-        resolve(text);
-        try { recognizer.close(); } catch {}
-      }, (err: any) => {
-        reject(err);
-        try { recognizer.close(); } catch {}
-      });
+      recognizer.recognizeOnceAsync(
+        (result: any) => {
+          const text = result?.text || "";
+          resolve(text);
+          try { recognizer.close(); } catch {}
+        },
+        (err: any) => {
+          reject(err);
+          try { recognizer.close(); } catch {}
+        }
+      );
     } catch (err) {
       reject(err);
     }
   });
 }
 
-/**
- * speakText
- * - Synchronously returns a Promise that resolves when TTS completes or rejects on error.
- * - On Safari/iOS, initiating playback in direct response to a user gesture is most reliable.
- */
-export function speakText(text: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!SDK || !ttsSynth) return reject(new Error("Speech SDK or TTS not available"));
+// ===================== Text-to-Speech (TTS) =====================
+export async function speakText(text: string): Promise<void> {
+  if (!SDK || !ttsSynth) throw new Error("TTS SDK not initialized");
 
+  return new Promise((resolve, reject) => {
     try {
       ttsSynth.speakTextAsync(
         text,
-        () => {
-          resolve();
-        },
-        (err: any) => {
-          console.error("TTS error", err);
-          reject(err);
-        }
+        () => resolve(),
+        (err: any) => reject(err)
       );
     } catch (err) {
       reject(err);

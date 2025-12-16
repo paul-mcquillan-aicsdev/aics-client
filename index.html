@@ -1,32 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>AI Assistant</title>
+
+  <!-- Azure Speech SDK -->
+  <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="./aics.css">
+  <link rel="stylesheet" href="./contextPanel.css">
+</head>
+<body>
+  <div id="app">
+    <h2>AI Agent</h2>
+
+    <div id="chatContainer">
+      <div id="chatLog"></div>
+      <div id="typingIndicator" class="hidden">🤖 AI is typing...</div>
+    </div>
+
+    <div id="controls">
+      <textarea id="messageInput" rows="2" placeholder="Type your message..." autofocus></textarea>
+      <div id="buttons">
+        <button id="sendBtn">Send</button>
+        <button id="voiceBtn">🎤 Talk</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+    </div>
+
+    <div id="contextPanel">
+      <!-- Optional: show conversation context, entities etc. -->
+    </div>
+  </div>
+
+  <!-- JS -->
+  <script type="module" src="./app.js"></script>
+=======
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>AI Interface</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Assistant Chat</title>
 <link rel="stylesheet" href="./aics.css">
 <link rel="stylesheet" href="./contextPanel.css">
 </head>
 <body>
 
-<div id="app">
-  <!-- Chat log -->
-  <div id="chatContainer">
-    <div id="chatLog"></div>
-  </div>
+<h2>AI Assistant Chat</h2>
 
-  <div id="controls">
-    <textarea id="messageInput" rows="2" placeholder="Type your message..." autofocus></textarea>
-    <div id="buttons">
-      <button id="sendBtn">Send</button>
-      <button id="recordBtn">🎤 Speak</button>
-    </div>
+<div id="chatLog"></div>
+
+<div id="controls">
+  <textarea id="messageInput" rows="2" placeholder="Type your message..." autofocus></textarea>
+  <div id="buttons">
+    <button id="sendBtn">Send</button>
+    <button id="recordBtn">🎤 Speak</button>
   </div>
 </div>
 
 <!-- Optional: Azure Speech SDK -->
 <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
 <script type="module" src="./app.js"></script>
-
 </body>
 </html>

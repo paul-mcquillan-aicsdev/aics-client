@@ -1,36 +1,43 @@
-const SDK = window.SpeechSDK || window.SpeechSDK || window.speechSDK || SpeechSDK;
-if (!SDK) {
+const SDK = window.SpeechSDK;
+if (!SDK)
     console.warn("Azure Speech SDK not found. Make sure the script is loaded in index.html.");
-}
-// Configure these with your Azure Speech key + region
-const AZURE_SPEECH_KEY = "YOUR_AZURE_KEY";
-const AZURE_SPEECH_REGION = "YOUR_AZURE_REGION";
-// Speech recognition config
-const speechConfig = SDK ? SDK.SpeechConfig.fromSubscription(AZURE_SPEECH_KEY, AZURE_SPEECH_REGION) : null;
-if (speechConfig)
-    speechConfig.speechRecognitionLanguage = "en-US";
-// TTS config — reuse or create new SpeechConfig
-const ttsConfig = SDK ? SDK.SpeechConfig.fromSubscription(AZURE_SPEECH_KEY, AZURE_SPEECH_REGION) : null;
-if (ttsConfig)
-    ttsConfig.speechSynthesisVoiceName = "en-US-JennyNeural";
-// Create synthesizer once (re-usable)
-const ttsSynth = SDK && ttsConfig ? new SDK.SpeechSynthesizer(ttsConfig) : null;
+// ===================== Token Initialization =====================
+let speechConfig = null;
+let ttsSynth = null;
 /**
- * recognizeSpeech
- * - Starts a single-shot speech recognition from the default microphone.
- * - Must be called from a user gesture (button click) on Safari/iOS to grant mic permission.
+ * Fetch short-lived Azure Speech token from backend
  */
-export function recognizeSpeech() {
+async function getAzureSpeechToken() {
+    const res = await fetch("/api/SpeechToken");
+    if (!res.ok)
+        throw new Error("Failed to get speech token");
+    return res.json();
+}
+/**
+ * Initialize SDK configs using token
+ */
+export async function initSpeechSDK() {
+    if (!SDK)
+        throw new Error("Speech SDK not loaded");
+    const { token, region } = await getAzureSpeechToken();
+    // Recognition config
+    speechConfig = SDK.SpeechConfig.fromAuthorizationToken(token, region);
+    speechConfig.speechRecognitionLanguage = "en-US";
+    // TTS config
+    const ttsConfig = SDK.SpeechConfig.fromAuthorizationToken(token, region);
+    ttsConfig.speechSynthesisVoiceName = "en-GB-AbbiNeural";
+    ttsSynth = new SDK.SpeechSynthesizer(ttsConfig);
+}
+// ===================== Speech-to-Text (STT) =====================
+export async function recognizeSpeech() {
+    if (!SDK || !speechConfig)
+        throw new Error("Speech SDK not initialized");
     return new Promise((resolve, reject) => {
-        if (!SDK || !speechConfig)
-            return reject(new Error("Speech SDK not available"));
         try {
             const audioConfig = SDK.AudioConfig.fromDefaultMicrophoneInput();
             const recognizer = new SDK.SpeechRecognizer(speechConfig, audioConfig);
-            // Single-shot recognition
             recognizer.recognizeOnceAsync((result) => {
-                // result.reason could be NoMatch/RecognizedSpeech etc. We'll return text if present.
-                const text = result && result.text ? result.text : "";
+                const text = result?.text || "";
                 resolve(text);
                 try {
                     recognizer.close();
@@ -49,22 +56,13 @@ export function recognizeSpeech() {
         }
     });
 }
-/**
- * speakText
- * - Synchronously returns a Promise that resolves when TTS completes or rejects on error.
- * - On Safari/iOS, initiating playback in direct response to a user gesture is most reliable.
- */
-export function speakText(text) {
+// ===================== Text-to-Speech (TTS) =====================
+export async function speakText(text) {
+    if (!SDK || !ttsSynth)
+        throw new Error("TTS SDK not initialized");
     return new Promise((resolve, reject) => {
-        if (!SDK || !ttsSynth)
-            return reject(new Error("Speech SDK or TTS not available"));
         try {
-            ttsSynth.speakTextAsync(text, () => {
-                resolve();
-            }, (err) => {
-                console.error("TTS error", err);
-                reject(err);
-            });
+            ttsSynth.speakTextAsync(text, () => resolve(), (err) => reject(err));
         }
         catch (err) {
             reject(err);

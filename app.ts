@@ -1,113 +1,124 @@
-import { sendMessage } from "./api.js";
+// ===================== Imports =====================
+import { sendMessage, resetConversation } from './api.js';
+import { recognizeSpeech, speakText, initSpeechSDK } from './speech.js';
 
+// ===================== Interfaces =====================
+interface ChatMessage {
+  message: string;
+  sender: "user" | "ai";
+  timestamp: Date;
+}
+
+// ===================== DOM Elements =====================
+const chatLog = document.getElementById("chatLog") as HTMLDivElement;
 const messageInput = document.getElementById("messageInput") as HTMLTextAreaElement;
 const sendBtn = document.getElementById("sendBtn") as HTMLButtonElement;
-const chatLog = document.getElementById("chatLog") as HTMLDivElement;
+const resetBtn = document.getElementById("resetBtn") as HTMLButtonElement;
+const typingIndicator = document.getElementById("typingIndicator") as HTMLDivElement;
+const voiceBtn = document.getElementById("voiceBtn") as HTMLButtonElement | null;
 
-// Profile icons (placeholder URLs)
-const userIcon = "./images/user.svg";
-const aiIcon = "./images/ai.svg";
+// ===================== Helper Functions =====================
+function createMessageBubble(msg: ChatMessage) {
+  const bubble = document.createElement("div");
+  bubble.classList.add(msg.sender === "user" ? "user-msg" : "ai-msg");
 
-let typingDiv: HTMLDivElement | null = null;
-let typingTimer: number | null = null;
+  // Profile Icon
+  const icon = document.createElement("span");
+  icon.classList.add("profile-icon");
+  icon.textContent = msg.sender === "user" ? "🧑" : "🤖";
 
-/**
- * Append a message to chat log
- */
-function appendMessage(text: string, sender: "user" | "ai") {
-  const msgDiv = document.createElement("div");
-  msgDiv.className = `message ${sender}-msg`;
-
-  const icon = document.createElement("img");
-  icon.className = "profile-icon";
-  icon.src = sender === "user" ? userIcon : aiIcon;
-
+  // Message content
   const content = document.createElement("div");
-  content.className = "msg-content";
+  content.classList.add("msg-content");
+  content.textContent = msg.message;
 
-  const msgText = document.createElement("div");
-  msgText.textContent = text;
+  // Timestamp
+  const timestamp = document.createElement("span");
+  timestamp.classList.add("timestamp");
+  timestamp.textContent = msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const timestamp = document.createElement("div");
-  timestamp.className = "timestamp";
-  const now = new Date();
-  timestamp.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-  content.appendChild(msgText);
   content.appendChild(timestamp);
+  bubble.appendChild(icon);
+  bubble.appendChild(content);
+  chatLog.appendChild(bubble);
 
-  msgDiv.appendChild(icon);
-  msgDiv.appendChild(content);
-
-  chatLog.appendChild(msgDiv);
+  // Auto-scroll
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
-// Send button click
-sendBtn.addEventListener("click", async () => {
+function showTypingIndicator(duration = 3000) {
+  typingIndicator.classList.remove("hidden");
+  setTimeout(() => typingIndicator.classList.add("hidden"), duration);
+}
+
+// ===================== Send Message =====================
+async function handleSendMessage() {
   const message = messageInput.value.trim();
   if (!message) return;
 
-  // CLEAR INPUT IMMEDIATELY
-  messageInput.value = "";
-  messageInput.focus();  
-  sendBtn.disabled = true;
+  // Render user message
+  createMessageBubble({ message, sender: "user", timestamp: new Date() });
 
-  appendMessage(message, "user");
+  // Clear input
+  messageInput.value = "";
+  messageInput.focus();
+
+  // Typing indicator
+  showTypingIndicator();
 
   try {
+    const aiResponse = await sendMessage(message);
 
-      // ⏳ Schedule typing indicator after 3 seconds
-      typingTimer = window.setTimeout(() => {
-        showTypingIndicator();
-      }, 3000);
+    createMessageBubble({ message: aiResponse, sender: "ai", timestamp: new Date() });
 
-    const reply = await sendMessage(message);
-    hideTypingIndicator();
-    appendMessage(reply, "ai");
+    // Speak AI response
+    try { await speakText(aiResponse); } catch (err) { console.error("TTS failed", err); }
 
-    messageInput.value = "";
-    messageInput.focus();
   } catch (err) {
-    hideTypingIndicator();
     console.error(err);
-    appendMessage("Error sending message: " + err.message, "ai");
-  } finally {
-    sendBtn.disabled = false;
+    createMessageBubble({ message: "Error sending message", sender: "ai", timestamp: new Date() });
   }
-});
+}
 
-// Enter key sends message
+// ===================== Event Listeners =====================
+sendBtn.addEventListener("click", handleSendMessage);
+
 messageInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    sendBtn.click();
+    handleSendMessage();
   }
 });
 
-function showTypingIndicator() {
-  if (typingDiv) return;
+resetBtn.addEventListener("click", () => {
+  resetConversation();
+  chatLog.innerHTML = "";
+  messageInput.focus();
+});
 
-  typingDiv = document.createElement("div");
-  typingDiv.className = "typing-indicator";
-  typingDiv.innerHTML = `
-    <span>AI is typing</span>
-    <span class="typing-dots">
-      <span>.</span><span>.</span><span>.</span>
-    </span>
-  `;
-  chatLog.appendChild(typingDiv);
-  chatLog.scrollTop = chatLog.scrollHeight;
+if (voiceBtn) {
+  voiceBtn.addEventListener("click", async () => {
+    try {
+      const userText = await recognizeSpeech(); // STT
+      if (!userText) return;
+
+      messageInput.value = userText;
+      await handleSendMessage();
+    } catch (err) {
+      console.error("Voice recognition failed", err);
+    }
+  });
 }
 
-function hideTypingIndicator() {
-  if (typingTimer) {
-    clearTimeout(typingTimer);
-    typingTimer = null;
+// ===================== Initialization =====================
+(async () => {
+  try {
+    await initSpeechSDK(); // fetch token & init SDK
+    console.log("Azure Speech SDK initialized successfully");
+  } catch (err) {
+    console.error("Failed to initialize Azure Speech SDK", err);
   }
 
-  if (typingDiv) {
-    typingDiv.remove();
-    typingDiv = null;
-  }
-}
+  // Focus input on load
+  messageInput.focus();
+})();
