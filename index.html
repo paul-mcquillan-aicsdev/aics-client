@@ -2,20 +2,25 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Assistant Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>AI Interface</title>
 <link rel="stylesheet" href="./aics.css">
 <link rel="stylesheet" href="./contextPanel.css">
 </head>
 <body>
 
-<div id="chatLog"></div>
+<div id="app">
+  <!-- Chat log -->
+  <div id="chatContainer">
+    <div id="chatLog"></div>
+  </div>
 
-<div id="controls">
-  <textarea id="messageInput" rows="2" placeholder="Type your message..." autofocus></textarea>
-  <div id="buttons">
-    <button id="sendBtn">Send</button>
-    <button id="recordBtn">🎤 Speak</button>
+  <div id="controls">
+    <textarea id="messageInput" rows="2" placeholder="Type your message..." autofocus></textarea>
+    <div id="buttons">
+      <button id="sendBtn">Send</button>
+      <button id="recordBtn">🎤 Speak</button>
+    </div>
   </div>
 </div>
 
