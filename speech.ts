@@ -14,7 +14,7 @@ let ttsSynth: any = null;
  * Fetch short-lived Azure Speech token from backend
  */
 async function getAzureSpeechToken(): Promise<{ token: string; region: string }> {
-  const res = await fetch("/api/SpeechToken");
+  const res = await fetch("https://aics-fahbamdcfpase8dd.canadacentral-01.azurewebsites.net/api/SpeechToken");
   if (!res.ok) throw new Error("Failed to get speech token");
   return res.json();
 }
