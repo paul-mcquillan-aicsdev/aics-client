@@ -14,7 +14,7 @@
 </head>
 <body>
   <div id="app">
-    <h2>AI Agent UX - v0.1.0.2</h2>
+    <h2>AI Agent UX - v0.1.0.3</h2>
 
     <div id="chatContainer">
       <div id="chatLog"></div>
@@ -26,11 +26,13 @@
       </div>
     </div>
 
+    <div id="liveTranscript" aria-live="polite"></div>
+
     <div id="controls">
       <textarea id="messageInput" rows="2" placeholder="Type your message..." autofocus></textarea>
       <div id="buttons">
         <button id="sendBtn">Send</button>
-        <button id="voiceBtn">🎤 Talk</button>
+        <button id="talkBtn">🎤 Talk</button>
         <button id="resetBtn">Reset</button>
       </div>
     </div>
